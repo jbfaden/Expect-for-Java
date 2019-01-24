@@ -1,3 +1,5 @@
+package external;
+    
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -9,15 +11,10 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import org.apache.log4j.ConsoleAppender;
-import org.apache.log4j.FileAppender;
-import org.apache.log4j.Layout;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
-import org.apache.log4j.PatternLayout;
 
 
 /**
@@ -41,11 +38,13 @@ import org.apache.log4j.PatternLayout;
  * designed to be thread-safe, in other words, do not call methods of the same
  * Expect object in different threads.
  * 
- * @author Ronnie Dong
- * @version 1.1
+ * @author Ronnie Dong 
+ * @version 1.2 (modified from original, https://github.com/ronniedong/Expect-for-Java/blob/master/Expect.java)
  */
 public class Expect {
-	static final Logger log = Logger.getLogger(Expect.class);
+
+    static final Logger log = Logger.getLogger( "expect" );
+    
 	/**Logging is turned off by default.*/
 	static {
 		log.setLevel(Level.OFF);
@@ -62,7 +61,7 @@ public class Expect {
 			selector = Selector.open();
 			inputChannel.register(selector, SelectionKey.OP_READ);
 		} catch (IOException e) {
-			log.fatal("Fatal error when initializing pipe or selector", e);
+			log.log( Level.SEVERE, "Fatal error when initializing pipe or selector", e);
 			//e.printStackTrace();
 		}
 		this.output = output;
@@ -100,16 +99,16 @@ public class Expect {
 							duplicatedTo.append(toWrite);	// no Exception will be thrown
 						}
 					}
-					log.debug("EOF from InputStream");
+					log.fine("EOF from InputStream");
 					input.close();		// now that input has EOF, close it.
 										// other than this, do not close input
 				} catch (IOException e) {
-					log.warn("IOException when piping from InputStream, "
+					log.log( Level.WARNING, "IOException when piping from InputStream, "
 							+ "now the piping thread will end", e);
 					//e.printStackTrace();
 				} finally {
 					try {
-						log.debug("closing sink of the pipe");
+						log.fine("closing sink of the pipe");
 						out.close();
 					} catch (IOException e) {
 					}
@@ -149,7 +148,7 @@ public class Expect {
 			p = pb.start();
 		} catch (IOException e) {
 			//e.printStackTrace();
-			log.error("Error when spawning command: " + command, e);
+			log.log( Level.WARNING, "Error when spawning command: " + command, e);
 			return null;
 		}
 		Expect retv = new Expect(p.getInputStream(), p.getOutputStream());
@@ -176,7 +175,7 @@ public class Expect {
 			output.write(toWrite);
 			output.flush();
 		} catch (IOException e) {
-			log.error("Error when sending bytes to output", e);
+			log.log( Level.WARNING, "Error when sending bytes to output", e);
 			//e.printStackTrace();
 		}
 	}
@@ -229,7 +228,7 @@ public class Expect {
 			else if (o instanceof Pattern)
 				list.add((Pattern) o);
 			else{
-				log.warn("Object " + o.toString() + " (class: "
+				log.warning("Object " + o.toString() + " (class: "
 						+ o.getClass().getName() + ") is neither a String nor "
 						+ "a java.util.regex.Pattern, using as a literal String");
 				list.add(Pattern.compile(Pattern.quote(o.toString())));
@@ -255,7 +254,7 @@ public class Expect {
 	 *         timeout
 	 */
 	public int expect(int timeout, List<Pattern> list) {
-		log.debug("Expecting " + list);
+		log.fine("Expecting " + list);
 		
 		clearGlobalVariables();
 		long endTime = System.currentTimeMillis() + (long)timeout * 1000;
@@ -265,11 +264,11 @@ public class Expect {
 			int n;
 			while (true) {
 				for (int i = 0; i < list.size(); i++) {
-					log.trace("trying to match " + list.get(i)
+					log.finer("trying to match " + list.get(i)
 							+ " against buffer \"" + buffer + "\"");
 					Matcher m = list.get(i).matcher(buffer);
 					if (m.find()) {
-						log.trace("success!");
+						log.finer("success!");
 						int matchStart = m.start(), matchEnd = m.end();
 						this.before = buffer.substring(0, matchStart);
 						this.match = m.group();
@@ -283,7 +282,7 @@ public class Expect {
 				if (restart_timeout_upon_receive)
 					waitTime = timeout * 1000;
 				if (waitTime <= 0) {
-					log.debug("Timeout when expecting " + list);
+					log.fine("Timeout when expecting " + list);
 					return RETV_TIMEOUT;
 				}
 				//System.out.println("waiting for "+waitTime);
@@ -293,29 +292,30 @@ public class Expect {
 				if (selector.selectedKeys().size() == 0) {
 					//System.err.println("timeout!");
 					//break;	//we can directly "break" here
-					log.debug("Timeout when expecting " + list);
+					log.fine("Timeout when expecting " + list);
 					return RETV_TIMEOUT;
 				}
 				selector.selectedKeys().clear();
 				if ((n = inputChannel.read(bytes)) == -1) {
 					//System.err.println("EOF!");
 					//break;
-					log.debug("EOF when expecting " + list);
+					log.fine("EOF when expecting " + list);
 					return RETV_EOF;
 				}
+                                log.log(Level.FINEST, "read bytes: {0}", n);
 				StringBuilder tmp = new StringBuilder();
 				for (int i = 0; i < n; i++) {
 					buffer.append((char) bytes.get(i));
 					tmp.append(byteToPrintableString(bytes.get(i)));
 				}
-				log.debug("Obtained following from InputStream: " + tmp);
+				log.fine("Obtained following from InputStream: " + tmp);
 				bytes.clear();
 				
 				//System.out.println(buffer);
 			}
 		} catch (IOException e) {
 			//e.printStackTrace();
-			log.error("IOException when selecting or reading", e);
+			log.log( Level.WARNING, "IOException when selecting or reading", e);
 			thrownIOE = e;
 			return RETV_IOEXCEPTION;
 		}
@@ -430,13 +430,13 @@ public class Expect {
 		try {
 			this.output.close();
 		} catch (IOException e) {
-			log.warn("Exception when closing OutputStream", e);
+			log.log( Level.WARNING, "Exception when closing OutputStream", e);
 			//e.printStackTrace();
 		}
 		try {
 			this.inputChannel.close();
 		} catch (IOException e) {
-			log.warn("Exception when closing input Channel", e);
+			log.log( Level.WARNING, "Exception when closing input Channel", e);
 			//e.printStackTrace();
 		}
 	}
@@ -494,26 +494,6 @@ public class Expect {
 	}
 	@SuppressWarnings("serial")
 	public static class EOFException extends Exception{
-	}
-	
-	private static Layout layout = new PatternLayout(
-			PatternLayout.TTCC_CONVERSION_PATTERN);
-
-	public static void addLogToConsole(Level level) {
-		log.setLevel(Level.ALL);
-		ConsoleAppender console = new ConsoleAppender(layout);
-		console.setThreshold(level);
-		log.addAppender(console);
-	}
-	public static void addLogToFile(String filename, Level level) throws IOException {
-		log.setLevel(Level.ALL);
-		FileAppender file = new FileAppender(layout, filename);
-		file.setThreshold(level);
-		log.addAppender(file);
-	}
-	public static void turnOffLogging(){
-		log.setLevel(Level.OFF);
-		log.removeAllAppenders();
 	}
 	
 	private static PrintStream duplicatedTo = null;
